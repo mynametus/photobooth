@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
 import { FRAMES } from "../src/lib/frames.ts";
-import { TEMPLATES } from "../src/lib/templates.ts";
+import { TEMPLATES, getTemplateSlots } from "../src/lib/templates.ts";
 
 const base = process.env.TEST_BASE_URL || "http://127.0.0.1:3000";
 let browser;
@@ -264,7 +264,38 @@ test("larger template library supports search, collections and new designs on mo
   await context.close();
 });
 
-test("curated collection uses visitor photos and exports every template in both layouts", { timeout: 120000 }, async () => {
+test("family and kids collections render artwork and actual oval photo cutouts", async () => {
+  const { page, context, errors } = await open({}, true);
+  await page.locator('input[type="file"]').setInputFiles(await fixtures(page));
+  await waitForPreview(page);
+  await page.getByRole("button", { name: "Chọn mẫu khung", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Một khung hình, một câu chuyện." });
+  await dialog.getByRole("button", { name: "Trẻ em", exact: true }).click();
+  assert.equal(await dialog.locator(".template-card").count(), 8);
+  await dialog.getByRole("button", { name: "Mẫu Thung lũng khủng long", exact: true }).click();
+  await waitForPreview(page);
+  const shades = await page.getByTestId("result-canvas").evaluate(canvas => {
+    const data = canvas.getContext("2d").getImageData(300, 2500, 600, 350).data;
+    const colors = new Set();
+    for (let i = 0; i < data.length; i += 16) colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
+    return colors.size;
+  });
+  assert.ok(shades > 100, "PNG character artwork should be painted into the exported canvas");
+  await page.getByRole("button", { name: "Chọn mẫu khung", exact: true }).click();
+  await dialog.getByRole("button", { name: "Dễ thương", exact: true }).click();
+  assert.equal(await dialog.locator(".template-card").count(), 4);
+  await dialog.getByRole("button", { name: "Mẫu Bloom & oval", exact: true }).click();
+  await page.locator(".design-tuning summary").click();
+  await page.getByRole("button", { name: "Khung Trắng tuyết", exact: true }).click();
+  await waitForPreview(page);
+  const slot = getTemplateSlots("oval-bloom", "strip")[0];
+  const corner = await page.getByTestId("result-canvas").evaluate((canvas, slot) => [...canvas.getContext("2d").getImageData(slot.x + 4, slot.y + 4, 1, 1).data], slot);
+  assert.deepEqual(corner, [255, 255, 255, 255], "the corner outside an oval must show the frame, rather than photo pixels");
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("curated collection uses visitor photos and exports every template in both layouts", { timeout: Math.max(120000, TEMPLATES.length * 5000) }, async () => {
   const { page, context, errors } = await open({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, true);
   await page.locator('input[type="file"]').setInputFiles(await fixtures(page));
   await waitForPreview(page);

@@ -144,10 +144,10 @@ test("template artwork escapes visitor text and keeps demo illustrations out of 
 });
 
 test("expanded catalogue has unique identities and valid presets for every collection", () => {
-  assert.equal(TEMPLATES.length, 32);
+  assert.equal(TEMPLATES.length, 48);
   assert.equal(new Set(TEMPLATES.map(template => template.id)).size, TEMPLATES.length);
   assert.equal(new Set(TEMPLATES.map(template => template.name)).size, TEMPLATES.length);
-  assert.equal(TEMPLATES.filter(template => template.isNew).length, 24);
+  assert.equal(TEMPLATES.filter(template => template.isNew).length, 40);
   for (const template of TEMPLATES) {
     assert.ok(TEMPLATE_GROUPS.includes(template.group), template.id);
     assert.ok(FILTERS.some(filter => filter.id === template.filter), template.id);
@@ -163,7 +163,12 @@ test("template search handles Vietnamese accents, aliases and category filters",
   assert.deepEqual(findTemplates("Lãng mạn", "tet"), []);
   assert.equal(findTemplates("Lễ hội").length, 2);
   assert.equal(findTemplates("Cartoon").length, 8);
-  assert.equal(findTemplates("Tất cả", "hoat hinh").length, 8);
+  assert.equal(findTemplates("Tất cả", "hoat hinh").length, 16);
+  assert.equal(findTemplates("Gia đình").length, 4);
+  assert.equal(findTemplates("Trẻ em").length, 8);
+  assert.equal(findTemplates("Dễ thương").length, 4);
+  assert.deepEqual(findTemplates("Tất cả", "khung bau duc").map(template => template.id), ["oval-bloom"]);
+  assert.deepEqual(findTemplates("Trẻ em", "khung long").map(template => template.id), ["dino-valley"]);
   assert.deepEqual(findTemplates("Cartoon", "tiem banh").map(template => template.id), ["winter-bakery"]);
   assert.deepEqual(findTemplates("Cartoon", "rai ca").map(template => template.id), ["sky-pals"]);
   assert.deepEqual(findTemplates("Cartoon", "gau").map(template => template.id), ["bear-picnic"]);
@@ -171,14 +176,14 @@ test("template search handles Vietnamese accents, aliases and category filters",
   assert.deepEqual(findTemplates("Tất cả", "unknown-template-123"), []);
   const results = findTemplates();
   assert.equal(results.length, TEMPLATES.length);
-  assert.ok(results.slice(0, 24).every(template => template.isNew));
-  assert.ok(results.slice(0, 8).every(template => template.group === "Cartoon"));
+  assert.ok(results.slice(0, 40).every(template => template.isNew));
+  assert.equal(results[0].id, "carnival-pals");
   assert.equal(TEMPLATES[0].id, "coquette", "search sorting must preserve the default template");
 });
 
 test("detailed character frames ship transparent artwork outside the four photos", async () => {
   const detailed = TEMPLATES.filter(template => getTemplateScene(template.id, "strip").artwork.length);
-  assert.equal(detailed.length, 4);
+  assert.equal(detailed.length, 12);
   for (const template of detailed) {
     for (const layout of ["strip", "grid"]) {
       const scene = getTemplateScene(template.id, layout);
@@ -192,5 +197,14 @@ test("detailed character frames ship transparent artwork outside the four photos
         assert.ok(bytes.readUInt32BE(16) >= 1000 && bytes.readUInt32BE(20) >= 1000);
       }
     }
+  }
+});
+
+test("oval frame apertures are elliptical in demo and export geometry", () => {
+  for (const layout of ["strip", "grid"]) {
+    const scene = getTemplateScene("oval-bloom", layout);
+    assert.ok(scene.slots.every(slot => slot.shape === "oval"));
+    for (const index of [0, 1, 2, 3]) assert.ok(scene.preview.includes(`clip-path="url(#oval-${index})"`));
+    assert.equal(getTemplateSlots("family-album", layout).some(slot => slot.shape === "oval"), false);
   }
 });

@@ -132,7 +132,10 @@ export async function renderPhoto(canvas: HTMLCanvasElement, photos: Photo[], de
       drawCover(photoCtx, image, image.naturalWidth, image.naturalHeight, 0, 0, photo.width, photo.height, photos[index].crop);
       filterPixels(photoCtx, design.filter, 0, 0, photo.width, photo.height, design.filterStrength);
       ctx.save(); ctx.translate(slot.x + slot.width / 2, slot.y + slot.height / 2); ctx.rotate(slot.rotation * Math.PI / 180);
-      ctx.beginPath(); ctx.roundRect(-slot.width / 2, -slot.height / 2, slot.width, slot.height, slot.radius); ctx.clip();
+      ctx.beginPath();
+      if (slot.shape === "oval") ctx.ellipse(0, 0, slot.width / 2, slot.height / 2, 0, 0, Math.PI * 2);
+      else ctx.roundRect(-slot.width / 2, -slot.height / 2, slot.width, slot.height, slot.radius);
+      ctx.clip();
       ctx.drawImage(photo, -slot.width / 2, -slot.height / 2, slot.width, slot.height); ctx.restore();
     });
     drawArtwork(ctx, scene.artwork, artworkImages);

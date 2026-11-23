@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import sharp from "sharp";
 import { TEMPLATES, getTemplateScene, escapeSvg } from "../src/lib/templates.ts";
+import { PLAYFUL_TEMPLATES } from "../src/lib/playful-templates.ts";
 
 await mkdir("test-results/templates", { recursive: true });
 const tiles = [];
@@ -27,5 +28,9 @@ async function contactSheet(selected, path) {
 await contactSheet(tiles, "test-results/template-collection.png");
 await contactSheet(tiles.filter((_, index) => TEMPLATES[index].group === "Cartoon"), "test-results/template-cartoon.png");
 await contactSheet(tiles.filter((_, index) => getTemplateScene(TEMPLATES[index].id, "strip").artwork.length > 0), "test-results/template-character-collection.png");
+const familyIds = new Set(PLAYFUL_TEMPLATES.map(template => template.id));
+const familyTiles = tiles.filter((_, index) => familyIds.has(TEMPLATES[index].id));
+await contactSheet(familyTiles, "test-results/template-family-kids.png");
+for (let start = 0; start < familyTiles.length; start += 8) await contactSheet(familyTiles.slice(start, start + 8), `test-results/template-family-kids-${start / 8 + 1}.png`);
 for (let start = 0; start < tiles.length; start += 8) await contactSheet(tiles.slice(start, start + 8), `test-results/template-collection-${start / 8 + 1}.png`);
 console.log(`${TEMPLATES.length} strip SVGs, ${TEMPLATES.length} grid SVGs and ${Math.ceil(tiles.length / 8)} contact sheet pages rendered successfully.`);

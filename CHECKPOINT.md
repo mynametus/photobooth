@@ -16,6 +16,10 @@ Người dùng đã gửi ảnh chụp Instagram tại `codex-clipboard-2Xk2UU.p
 
 PNG đã lưu trong `public/frames/characters/`; prompt và nguồn công cụ trong `docs/CHARACTER_ASSETS.md`. Không phụ thuộc đường dẫn generated_images. `character-templates.ts` khai báo asset, bố cục riêng cả strip/grid và khoảng dành cho caption. Renderer ghép PNG giữa ảnh và overlay chữ; gallery dùng `renderTemplatePreview` khi chưa chụp đủ ảnh. Không chỉ trông chờ SVG thumbnail vì ảnh SVG dạng data URL không tải tài nguyên PNG ngoài.
 
+Yêu cầu hiện tại: tham khảo TemplatesBooth Family, Yeoja Crafts Gumroad, Vivid Curiosity Kids và Pngtree photo-booth strips để thêm nhiều mẫu. Đã nghiên cứu bốn nguồn và thêm **16 mẫu**, nâng tổng lên **48 mẫu, 10 nhóm**. Thêm 8 cảnh minh họa PNG bằng imagegen và 8 mẫu SVG gia đình/pastel; nhóm mới Gia đình (4), Trẻ em (8), Dễ thương (4). Nội dung nguồn và hướng áp dụng nằm trong `docs/DESIGN_REFERENCES.md`, prompt/file PNG trong `docs/FAMILY_ASSETS.md`.
+
+`src/lib/playful-templates.ts` khai báo 16 mẫu, phối màu, hình vẽ và bố cục. `TemplateSlot.shape` hỗ trợ oval; SVG placeholder và Canvas xuất ảnh cùng cắt ellipse. Gallery nhận diện artwork bằng `scene.artwork`, nên cả 12 mẫu PNG đều dựng thumbnail khi chưa chụp ảnh. 16 mẫu mới đứng đầu tìm kiếm; có từ khóa không dấu cho gia đình, khủng long, bầu dục, cartoon. PNG nằm trong `public/frames/family/`, không phụ thuộc thư mục generated_images.
+
 ## Dự án
 
 - Thư mục: `D:\working\photobooth\photobooth-web`.
@@ -27,7 +31,7 @@ PNG đã lưu trong `public/frames/characters/`; prompt và nguồn công cụ t
 ## Phần đã xây dựng
 
 - Giao diện tiếng Việt, phong cách pastel, responsive cho desktop và điện thoại.
-- 32 mẫu có chủ đề, trong đó 8 Cartoon. SVG có layer nền/ảnh/trang trí và 4 mẫu dùng thêm PNG nền trong suốt; hỗ trợ dải dọc/lưới.
+- 48 mẫu có chủ đề, trong đó 8 Cartoon và 16 mẫu mới gia đình/trẻ em/pastel. SVG có layer nền/ảnh/trang trí và 12 mẫu dùng thêm PNG nền trong suốt; hỗ trợ dải dọc/lưới, cắt oval cho Bloom & oval.
 - `src/lib/cartoon-templates.ts` chứa nhân vật gấu, mèo, thỏ và đồ họa pop-art; có phối cảnh, nét viền và bố cục riêng. Có thể tìm `gau`, `meo`, `tho`, `truyen tranh`, `hoat hinh` hoặc lọc Cartoon.
 - `src/lib/template-extras.ts` chứa 16 mẫu bổ sung; `findTemplates()` hỗ trợ tìm kiếm theo tiền tố từ, bỏ dấu tiếng Việt, từ khóa đồng nghĩa và nhóm chủ đề. Mẫu mới hiện trước, giữ nguyên mẫu mặc định Nơ hồng.
 - Gallery chỉ dựng các thẻ khi mở; IntersectionObserver trì hoãn ghép ảnh thật đến khi thumbnail gần vùng nhìn thấy, giúp giảm công việc khi thư viện có nhiều mẫu.
@@ -52,12 +56,13 @@ PNG đã lưu trong `public/frames/characters/`; prompt và nguồn công cụ t
 
 ## Kết quả kiểm tra gần nhất
 
-- `npm.cmd test`: **17/17 kiểm thử đạt**, bao gồm crop, đổi thứ tự, filter, tương phản chữ, vị trí ảnh trong 64 bố cục, escape SVG, tìm kiếm và asset PNG tồn tại/giữ RGBA/nằm ngoài vùng ảnh.
+- `npm.cmd test`: **18/18 kiểm thử đạt**, bao gồm crop, đổi thứ tự, filter, tương phản chữ, vị trí ảnh trong 96 bố cục, escape SVG, tìm kiếm, oval và 12 asset PNG tồn tại/giữ RGBA/nằm ngoài vùng ảnh.
 - `npm.cmd run typecheck`: **đạt**.
 - `npm.cmd run build`: **đạt**, tạo static export trong `out/`.
 - HTTP localhost: **200**.
-- Bản 32 mẫu: HTTP localhost **200**, bộ đếm catalogue **32/32**. 9 tài nguyên JS/CSS/icon, 4 PNG nhân vật và QR ủng hộ đều trả về **200**. Dùng lại server có sẵn trên cổng 3000, không dừng tiến trình không xác định chủ sở hữu.
-- `node scripts/preview-templates.mjs`: tạo đủ 64 SVG, có nhúng PNG khi cần, bảng đầy đủ và bảng riêng `test-results/template-character-collection.png`; đã xem trực tiếp 4 mẫu mới ở cả hai bố cục. Đây là QA hình vẽ SVG/PNG bằng Sharp, chưa phải kiểm tra app trong trình duyệt.
+- Bản 48 mẫu: HTTP localhost **200**, bộ đếm catalogue **48/48**. 8 tài nguyên JS/CSS, 8 PNG gia đình/trẻ em mới và QR ủng hộ đều trả về **200**. Dùng lại server có sẵn trên cổng 3000, không dừng tiến trình không xác định chủ sở hữu.
+- `node scripts/preview-templates.mjs`: tạo đủ 96 SVG, có nhúng PNG khi cần, 6 trang bộ sưu tập và hai bảng mới `test-results/template-family-kids-1.png`, `test-results/template-family-kids-2.png`; đã xem trực tiếp đủ 16 mẫu mới ở cả hai bố cục. Đây là QA hình vẽ SVG/PNG bằng Sharp, chưa phải kiểm tra app trong trình duyệt.
+- E2E mới kiểm tra nhóm Trẻ em/Dễ thương, pixel minh họa khủng long và góc ảnh ngoài ellipse. Đã kiểm tra cú pháp, chưa chạy trình duyệt do giới hạn Chrome bên dưới.
 - Bộ kiểm thử Playwright đã thử lại ngày 23/11 nhưng **chưa chạy được**: môi trường chặn khởi chạy Chrome (`spawn EPERM`). Không coi đây là kết quả xác nhận camera hoặc giao diện bằng trình duyệt.
 - Đã thêm E2E cho crop ảnh dọc, kiểm tra pixel thành phẩm, hủy chỉnh sửa và đổi thứ tự trên viewport điện thoại. Đã kiểm tra cú pháp; chưa chạy được trên trình duyệt.
 - Đã thêm E2E cho nhóm/độ đậm filter, màu tùy chọn, sticker mới và cả 12 viền ở hai bố cục; kiểm tra các viền khác nhau và không thay đổi pixel bên trong ảnh. Chưa chạy được trên trình duyệt.
@@ -90,7 +95,7 @@ PNG đã lưu trong `public/frames/characters/`; prompt và nguồn công cụ t
 3. Chạy Playwright trong môi trường cho phép Chrome; sửa lỗi quan sát được nếu có. Kiểm tra thêm Safari/iPhone, crop/lật ảnh, quyền camera và lưu file trên điện thoại.
    - Với trình chỉnh ảnh mới: thử ảnh dọc, zoom, dịch ngang/dọc ở hai mép, áp dụng/hủy/Escape, di chuyển từ vị trí đầu đến cuối, chụp lại ảnh đã crop và so sánh PNG/JPG tải xuống.
    - Với bảng trang trí: kiểm tra SVG filter trên ảnh/video ở Chrome và Safari, độ đậm 0/50/100%, màu tùy chọn, các viền ở hai bố cục và file xuất. Kiểm tra vùng preview sticky trên desktop khi bảng chọn dài.
-   - Với bộ sưu tập: mở gallery khi chưa có ảnh để kiểm tra 4 thumbnail PNG chi tiết, sau đó thử ảnh thật, nhóm Cartoon, chuyển giữa 32 mẫu và hai bố cục, crop/xoay trong scrapbook/postage/comic, font hệ thống, layer SVG/PNG và file xuất. Xem bảng mẫu và tài liệu tham khảo trước khi sửa phong cách.
+   - Với bộ sưu tập: mở gallery khi chưa có ảnh để kiểm tra 12 thumbnail PNG chi tiết, sau đó thử ảnh thật, các nhóm mới Gia đình/Trẻ em/Dễ thương, chuyển giữa 48 mẫu và hai bố cục, crop/xoay trong scrapbook/postage/comic/album, cắt oval, font hệ thống, layer SVG/PNG và file xuất. Xem bảng mẫu và tài liệu tham khảo trước khi sửa phong cách.
 4. Khi kết nối Git hoạt động, đồng bộ đúng source/build rồi publish cùng Site đã đăng ký nếu vẫn thuộc phạm vi được yêu cầu.
 5. Chưa bắt đầu giai đoạn 2: tài khoản, lưu ảnh online, GIF, sticker kéo thả và phòng chụp từ xa.
 

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TEMPLATES, TEMPLATE_GROUPS, findTemplates, getTemplateScene, svgDataUrl, type PhotoTemplate, type TemplateGroup } from "@/lib/templates";
 import { renderPhoto, renderTemplatePreview, type Design, type Photo } from "@/lib/photo";
-import { isCharacterTemplate } from "@/lib/character-templates";
 import Icon from "./icon";
 
 function TemplateThumbnail({ template, design, photos }: { template: PhotoTemplate; design: Design; photos: (Photo | null)[] }) {
@@ -17,7 +16,9 @@ function TemplateThumbnail({ template, design, photos }: { template: PhotoTempla
   const strength = selected ? design.filterStrength : template.strength;
   const caption = selected ? design.caption : "";
   const sticker = selected ? design.sticker : "none";
-  const preview = useMemo(() => svgDataUrl(getTemplateScene(template.id, design.layout, { color, caption, date: design.date, showDate: design.showDate }).preview), [template.id, design.layout, color, caption, design.date, design.showDate]);
+  const scene = useMemo(() => getTemplateScene(template.id, design.layout, { color, caption, date: design.date, showDate: design.showDate }), [template.id, design.layout, color, caption, design.date, design.showDate]);
+  const preview = useMemo(() => svgDataUrl(scene.preview), [scene]);
+  const hasArtwork = scene.artwork.length > 0;
 
   useEffect(() => {
     if (!("IntersectionObserver" in window)) { setVisible(true); return; }
@@ -31,7 +32,7 @@ function TemplateThumbnail({ template, design, photos }: { template: PhotoTempla
   useEffect(() => {
     setReady(false);
     const complete = photos.every(Boolean);
-    if (!visible || (!complete && !isCharacterTemplate(template.id))) return;
+    if (!visible || (!complete && !hasArtwork)) return;
     let cancelled = false;
     const staging = document.createElement("canvas");
     const thumbnailDesign: Design = { template: template.id, layout: design.layout, color, filter, filterStrength: strength, frame: "plain", caption, date: design.date, showDate: design.showDate, sticker };
@@ -45,7 +46,7 @@ function TemplateThumbnail({ template, design, photos }: { template: PhotoTempla
       ctx.drawImage(staging, 0, 0); setReady(true);
     }).catch(() => { /* The full-size studio preview reports export errors. */ });
     return () => { cancelled = true; };
-  }, [visible, photos, template.id, design.layout, color, filter, strength, caption, design.date, design.showDate, sticker]);
+  }, [visible, photos, hasArtwork, template.id, design.layout, color, filter, strength, caption, design.date, design.showDate, sticker]);
 
   return <span ref={artRef} className={`template-art ${design.layout}`}><img src={preview} alt="" hidden={ready} loading="lazy"/><canvas ref={canvasRef} hidden={!ready} aria-hidden="true"/></span>;
 }
@@ -76,7 +77,7 @@ export default function TemplateGallery({ design, photos, onChange, busy }: Prop
     {active && <button className="text-button custom-template-button" onClick={() => onChange({ ...design, template: "custom", color: "#fffdf8", filter: "original", filterStrength: 1, frame: "plain", sticker: "none" })} disabled={busy}>Tự phối khung</button>}
     <dialog ref={dialogRef} className="template-dialog" aria-labelledby="template-dialog-heading" onCancel={() => setOpen(false)} onClose={() => setOpen(false)}>
       <div className="template-dialog-top"><div><span className="collection-eyebrow">MỘT CHÚT. / FRAME COLLECTION</span><h2 id="template-dialog-heading">Một khung hình, một câu chuyện.</h2><p>Chọn cả một phong cách. Ảnh, lời nhắn và ngày chụp vẫn là của bạn.</p></div><button className="template-dialog-close" onClick={() => setOpen(false)} aria-label="Đóng bộ sưu tập"><Icon name="close"/></button></div>
-      <div className="template-search-row"><label className="template-search"><span>Tìm mẫu bạn thích</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Thử: hoa, Tết, matcha, điện ảnh…"/></label><span className="template-result-count" role="status">{matches.length}/{TEMPLATES.length} mẫu</span></div>
+      <div className="template-search-row"><label className="template-search"><span>Tìm mẫu bạn thích</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Thử: gia đình, khủng long, oval, pastel…"/></label><span className="template-result-count" role="status">{matches.length}/{TEMPLATES.length} mẫu</span></div>
       <div className="template-groups" role="group" aria-label="Chủ đề mẫu khung">{TEMPLATE_GROUPS.map(item => <button key={item} onClick={() => setGroup(item)} aria-pressed={group === item}>{item}<span aria-hidden="true">{item === "Tất cả" ? TEMPLATES.length : TEMPLATES.filter(template => template.group === item).length}</span></button>)}</div>
       <div className="template-gallery">{open && matches.map(template => <button className={`template-card ${design.template === template.id ? "chosen" : ""}`} key={template.id} onClick={() => choose(template)} aria-label={`Mẫu ${template.name}`} aria-pressed={design.template === template.id}>
         <span className={`template-card-stage ${template.id}`}><TemplateThumbnail template={template} design={design} photos={photos}/>{design.template === template.id && <span className="template-current"><Icon name="check" size={13}/>Đang dùng</span>}</span>

@@ -3,10 +3,11 @@ import type { Filter } from "./filters.ts";
 import { EXTRA_TEMPLATES, getExtraComposition, renderExtraTemplate, type ExtraTemplateId } from "./template-extras.ts";
 import { CARTOON_TEMPLATES, getCartoonComposition, renderCartoonTemplate, type CartoonTemplateId } from "./cartoon-templates.ts";
 import { CHARACTER_TEMPLATES, getCharacterArtwork, getCharacterComposition, isCharacterTemplate, renderCharacterTemplate, type CharacterTemplateId, type TemplateArtwork } from "./character-templates.ts";
+import { PLAYFUL_TEMPLATES, getPlayfulArtwork, getPlayfulComposition, isPlayfulTemplate, renderPlayfulTemplate, type PlayfulTemplateId } from "./playful-templates.ts";
 
-export type TemplateId = "custom" | "coquette" | "scrapbook" | "cherry" | "midnight" | "botanical" | "ocean" | "birthday" | "receipt" | ExtraTemplateId | CartoonTemplateId | CharacterTemplateId;
+export type TemplateId = "custom" | "coquette" | "scrapbook" | "cherry" | "midnight" | "botanical" | "ocean" | "birthday" | "receipt" | ExtraTemplateId | CartoonTemplateId | CharacterTemplateId | PlayfulTemplateId;
 export type CuratedTemplateId = Exclude<TemplateId, "custom">;
-export const TEMPLATE_GROUPS = ["Tất cả", "Cartoon", "Lãng mạn", "Nhật ký", "Đi chơi", "Tiệc vui", "Hoa & trái cây", "Lễ hội"] as const;
+export const TEMPLATE_GROUPS = ["Tất cả", "Gia đình", "Trẻ em", "Dễ thương", "Cartoon", "Lãng mạn", "Nhật ký", "Đi chơi", "Tiệc vui", "Hoa & trái cây", "Lễ hội"] as const;
 export type TemplateGroup = typeof TEMPLATE_GROUPS[number];
 export interface PhotoTemplate {
   id: CuratedTemplateId; name: string; subtitle: string; group: Exclude<TemplateGroup, "Tất cả">;
@@ -22,6 +23,7 @@ export const TEMPLATES: PhotoTemplate[] = [
   { id: "ocean", name: "The summer club", subtitle: "Sóng biển · vỏ sò · nắng cam", group: "Đi chơi", color: "#deedf5", ink: "#275b85", filter: "original", strength: 1, caption: "salty air & happy hearts" },
   { id: "birthday", name: "Make a wish", subtitle: "Bóng bay · ruy băng · ánh kim", group: "Tiệc vui", color: "#263fa3", ink: "#fff0bf", filter: "vivid", strength: .45, caption: "another year of lovely memories" },
   { id: "receipt", name: "Hóa đơn niềm vui", subtitle: "Giấy nhiệt · mã vạch · dấu ngày", group: "Nhật ký", color: "#f3f0e8", ink: "#33312c", filter: "mono", strength: 1, caption: "priceless moments, kept forever" },
+  ...PLAYFUL_TEMPLATES.map(template => ({ ...template, isNew: true })),
   ...CHARACTER_TEMPLATES.map(template => ({ ...template, isNew: true })),
   ...CARTOON_TEMPLATES.map(template => ({ ...template, isNew: true })),
   ...EXTRA_TEMPLATES.map(template => ({ ...template, isNew: true })),
@@ -42,6 +44,13 @@ export function findTemplates(group: TemplateGroup = "Tất cả", query = "") {
     "bunny-cloud": "hoạt hình cartoon thỏ bunny rabbit mây kawaii", "comic-pop": "hoạt hình cartoon truyện tranh comic pop art",
     "winter-bakery": "hoạt hình cartoon hổ tiệm bánh mùa đông tiger bakery winter", "sky-pals": "hoạt hình cartoon rái cá máy bay otter sky",
     "pink-bunny": "hoạt hình cartoon thỏ tim hồng bunny pink", "balloon-party": "hoạt hình cartoon hội bạn bóng bay balloon turquoise",
+    "carnival-pals": "hoạt hình cartoon rạp xiếc lễ hội carnival kids", "safari-family": "hoạt hình cartoon sư tử hươu voi jungle safari kids",
+    "dino-valley": "hoạt hình cartoon khủng long dinosaur kids", "mermaid-lagoon": "hoạt hình cartoon nàng tiên cá đại dương biển mermaid kids",
+    "wizard-owls": "hoạt hình cartoon phù thủy cú phép thuật wizard kids", "space-puppies": "hoạt hình cartoon phi hành gia vũ trụ tên lửa space kids",
+    "family-foxes": "hoạt hình cartoon gia đình cáo picnic fox family", "pirate-cove": "hoạt hình cartoon cướp biển hải tặc pirate kids",
+    "family-album": "gia đình album polaroid family", "family-plaid": "gia đình đoàn viên plaid family", "baby-cloud": "em bé sơ sinh thôi nôi baby shower",
+    "school-days": "trường học khai giảng tựu trường school kids", "pastel-film": "film gradient pastel cute", "oval-bloom": "hoa oval khung bầu dục cute",
+    "pixel-crush": "y2k pixel desktop cửa sổ cute", "ribbon-diary": "nhật ký nơ xanh ribbon cute",
   };
   return TEMPLATES.filter(template => {
     if (group !== "Tất cả" && template.group !== group) return false;
@@ -51,7 +60,7 @@ export function findTemplates(group: TemplateGroup = "Tất cả", query = "") {
     .sort((a, b) => Number(!!b.isNew) - Number(!!a.isNew));
 }
 
-export interface TemplateSlot { x: number; y: number; width: number; height: number; radius: number; rotation: number }
+export interface TemplateSlot { x: number; y: number; width: number; height: number; radius: number; rotation: number; shape?: "oval" }
 export function getTemplateSlots(id: CuratedTemplateId, layout: "strip" | "grid"): TemplateSlot[] {
   const strip = layout === "strip", w = strip ? 600 : 800;
   const original: Partial<Record<CuratedTemplateId, { side: number; top: number; gap: number; radius: number; tilted?: boolean }>> = {
@@ -61,14 +70,15 @@ export function getTemplateSlots(id: CuratedTemplateId, layout: "strip" | "grid"
     birthday: { side: 68, top: 110, gap: 30, radius: 2 }, receipt: { side: 64, top: 140, gap: 14, radius: 2 },
   };
   const cartoon = CARTOON_TEMPLATES.some(template => template.id === id);
-  const composition = original[id] ?? (isCharacterTemplate(id) ? getCharacterComposition() : cartoon ? getCartoonComposition(id as CartoonTemplateId) : getExtraComposition(id as ExtraTemplateId));
-  const grid = isCharacterTemplate(id) ? getCharacterComposition().grid : undefined;
+  const composition = original[id] ?? (isPlayfulTemplate(id) ? getPlayfulComposition(id) : isCharacterTemplate(id) ? getCharacterComposition() : cartoon ? getCartoonComposition(id as CartoonTemplateId) : getExtraComposition(id as ExtraTemplateId));
+  const grid = isPlayfulTemplate(id) ? getPlayfulComposition(id).grid : isCharacterTemplate(id) ? getCharacterComposition().grid : undefined;
   const side = strip ? composition.side : grid?.side ?? 64, top = strip ? composition.top : grid?.top ?? 70, gap = strip ? composition.gap : grid?.gap ?? 24;
   const columns = strip ? 1 : 2, width = (w - side * 2 - (columns - 1) * gap) / columns, height = width / 1.6;
   return Array.from({ length: 4 }, (_, i) => ({
     x: (side + i % columns * (width + gap)) * 2, y: (top + Math.floor(i / columns) * (height + gap)) * 2,
     width: width * 2, height: height * 2, radius: composition.radius * 2,
     rotation: composition.tilted ? [-1.7, 1.4, -1.1, 1.6][i] : 0,
+    shape: isPlayfulTemplate(id) ? getPlayfulComposition(id).shape : undefined,
   }));
 }
 
@@ -141,7 +151,7 @@ export function getTemplateScene(id: CuratedTemplateId, layout: "strip" | "grid"
   let footerY = h - (id === "receipt" && !strip ? 62 : strip ? 83 : 49), footerX = cx, footerWidth = w - 160;
   const caption = options.caption?.trim() || template.caption;
   let footerFont = SCRIPT, footerInk = ink;
-  const artwork: TemplateArtwork[] = isCharacterTemplate(id) ? getCharacterArtwork(id, layout) : [];
+  const artwork: TemplateArtwork[] = isCharacterTemplate(id) ? getCharacterArtwork(id, layout) : isPlayfulTemplate(id) ? getPlayfulArtwork(id, layout) : [];
 
   if (id === "coquette") {
     background += `<rect width="${w}" height="${h}" fill="url(#stripes)"/><rect x="32" y="17" width="${w - 64}" height="${h - 34}" rx="${(w - 64) / 2}" fill="#fff9f8" fill-opacity=".46" stroke="#b36e89" stroke-width="1"/>`;
@@ -217,6 +227,10 @@ export function getTemplateScene(id: CuratedTemplateId, layout: "strip" | "grid"
     for (let i = 0; i < 80; i++) overlay += `<rect x="${cx - 116 + i * 3}" y="${h - (strip ? 40 : 25)}" width="${i % 3 ? 1 : 2.5}" height="${i % 5 ? 17 : 22}" fill="${ink}"/>`;
     overlay += text(cx, h - (strip ? 110 : 88), "TOTAL: ONE VERY HAPPY DAY", 11, ink, MONO, 'font-weight="700"');
     footerFont = MONO;
+  } else if (isPlayfulTemplate(id)) {
+    const art = renderPlayfulTemplate(id, { w, h, base, ink, strip });
+    background += art.background; overlay += art.overlay; footerFont = art.footerFont;
+    if (art.footer) { footerX = art.footer.x; footerY = art.footer.y; footerWidth = art.footer.width; }
   } else if (isCharacterTemplate(id)) {
     const art = renderCharacterTemplate(id, { w, h, base, ink, strip });
     background += art.background; overlay += art.overlay; footerFont = art.footerFont;
@@ -236,13 +250,17 @@ export function getTemplateScene(id: CuratedTemplateId, layout: "strip" | "grid"
     if (template.group === "Cartoon") accents += `<rect x="${x - 4}" y="${y - 4}" width="${sw + 8}" height="${sh + 8}" rx="${slot.radius / 2 + 3}" fill="none" stroke="${ink}" stroke-width="${id === "comic-pop" ? 3 : 1.6}" transform="${rotate}"/>`;
     const paper = id === "scrapbook" || id === "postage";
     const pad = paper ? 9 : 5;
-    mats += `<g transform="${rotate}"><rect x="${x - pad}" y="${y - pad}" width="${sw + pad * 2}" height="${sh + pad * 2 + (paper ? 10 : 0)}" rx="${slot.radius / 2 + 2}" fill="${["midnight", "birthday", "cinema", "graduation", "christmas", "tet"].includes(id) ? "#d6bd87" : "#fffdf8"}" ${paper ? 'filter="url(#paper-shadow)"' : `stroke="${ink}" stroke-opacity=".3" stroke-width=".7"`}/></g>`;
+    const matColor = ["midnight", "birthday", "cinema", "graduation", "christmas", "tet", "wizard-owls", "space-puppies"].includes(id) ? "#d6bd87" : "#fffdf8";
+    const matStyle = `fill="${matColor}" ${paper ? 'filter="url(#paper-shadow)"' : `stroke="${ink}" stroke-opacity=".3" stroke-width=".7"`}`;
+    mats += `<g transform="${rotate}">${slot.shape === "oval" ? `<ellipse cx="${x + sw / 2}" cy="${y + sh / 2}" rx="${sw / 2 + pad}" ry="${sh / 2 + pad}" ${matStyle}/>` : `<rect x="${x - pad}" y="${y - pad}" width="${sw + pad * 2}" height="${sh + pad * 2 + (paper ? 10 : 0)}" rx="${slot.radius / 2 + 2}" ${matStyle}/>`}</g>`;
     if (id === "coquette") accents += `<rect x="${x - 5}" y="${y - 5}" width="${sw + 10}" height="${sh + 10}" rx="24" fill="none" stroke="#d2a3b0" stroke-width="3" stroke-dasharray="1 7" stroke-linecap="round"/>`;
     if (id === "scrapbook") accents += `<g transform="rotate(${i % 2 ? 19 : -18} ${x + sw / 2} ${y})"><path d="M${x + sw / 2 - 38} ${y - 12}l9-2 6 2 8-2 8 2 8-2 8 2 9-2 9 2 8-1v23l-9 2-7-2-9 2-8-2-7 2-8-2-7 2-8-2-8 2Z" fill="${i % 2 ? "#cdad88" : "#a8b9b4"}" opacity=".83"/></g>${text(x + sw - 15, y + sh + 15, `our day / 0${i + 1}`, 7, ink, MONO, `transform="${rotate}" text-anchor="end"`)}`;
     if (id === "receipt") accents += text(x - 15, y + 12, `0${i + 1}`, 8, ink, MONO, 'transform="rotate(-90 ' + (x - 15) + ' ' + (y + 12) + ')"');
     const photoColors = ["#c8c0ba", "#afc2c5", "#d6bdad", "#b9bbc8"];
+    const clip = slot.shape === "oval" ? `clip-path="url(#oval-${i})"` : "";
+    if (slot.shape === "oval") placeholder += `<defs><clipPath id="oval-${i}"><ellipse cx="${x + sw / 2}" cy="${y + sh / 2}" rx="${sw / 2}" ry="${sh / 2}"/></clipPath></defs>`;
     // Intentional demo artwork; replaced with the visitor's actual photos in the gallery.
-    placeholder += `<g transform="${rotate}"><rect x="${x}" y="${y}" width="${sw}" height="${sh}" rx="${slot.radius / 2}" fill="${photoColors[i]}"/><path d="M${x} ${y + sh}q${sw / 2} ${-sh * .65} ${sw} 0" fill="#ffffff" opacity=".25"/><circle cx="${x + sw * .4}" cy="${y + sh * .38}" r="${sh * .13}" fill="#f6e9de"/><circle cx="${x + sw * .62}" cy="${y + sh * .4}" r="${sh * .12}" fill="#f6e9de"/><path d="M${x + sw * .24} ${y + sh * .77}q${sw * .16} ${-sh * .6} ${sw * .32} 0M${x + sw * .48} ${y + sh * .8}q${sw * .14} ${-sh * .57} ${sw * .3} 0" fill="${ink}" opacity=".35"/>${text(x + sw / 2, y + sh - 18, "YOUR HAPPY MOMENT", 8, "#ffffff", MONO, 'letter-spacing="2"')}</g>`;
+    placeholder += `<g transform="${rotate}" ${clip}><rect x="${x}" y="${y}" width="${sw}" height="${sh}" rx="${slot.radius / 2}" fill="${photoColors[i]}"/><path d="M${x} ${y + sh}q${sw / 2} ${-sh * .65} ${sw} 0" fill="#ffffff" opacity=".25"/><circle cx="${x + sw * .4}" cy="${y + sh * .38}" r="${sh * .13}" fill="#f6e9de"/><circle cx="${x + sw * .62}" cy="${y + sh * .4}" r="${sh * .12}" fill="#f6e9de"/><path d="M${x + sw * .24} ${y + sh * .77}q${sw * .16} ${-sh * .6} ${sw * .32} 0M${x + sw * .48} ${y + sh * .8}q${sw * .14} ${-sh * .57} ${sw * .3} 0" fill="${ink}" opacity=".35"/>${text(x + sw / 2, y + sh - 18, "YOUR HAPPY MOMENT", 8, "#ffffff", MONO, 'letter-spacing="2"')}</g>`;
   });
   background += mats;
   overlay = accents + overlay;

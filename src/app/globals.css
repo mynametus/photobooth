@@ -2737,6 +2737,12 @@ h1>span {
 .template-card-stage.sky-pals { background: #d3e4f1; }
 .template-card-stage.pink-bunny { background: #f0d6e3; }
 .template-card-stage.balloon-party { background: #cde7e6; }
+.template-card-stage.carnival-pals,.template-card-stage.family-foxes,.template-card-stage.baby-cloud { background: #eadfd0; }
+.template-card-stage.safari-family,.template-card-stage.dino-valley,.template-card-stage.family-plaid { background: #dce4d4; }
+.template-card-stage.mermaid-lagoon,.template-card-stage.pirate-cove { background: #d7e6e8; }
+.template-card-stage.wizard-owls,.template-card-stage.space-puppies { background: #d8d9e6; }
+.template-card-stage.family-album,.template-card-stage.school-days,.template-card-stage.ribbon-diary { background: #e9e1d0; }
+.template-card-stage.pastel-film,.template-card-stage.oval-bloom,.template-card-stage.pixel-crush { background: #e8dce9; }
 .coffee-section {
   display: grid;
   grid-template-columns: auto minmax(0,1fr) auto;
