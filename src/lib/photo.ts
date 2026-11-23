@@ -1,33 +1,27 @@
+import { applyFilterPixels, type Filter } from "./filters.ts";
+import { drawFrame, drawSticker, getFramePalette, type FrameStyle, type Sticker } from "./frames.ts";
+import { getTemplateScene, svgDataUrl, type TemplateId } from "./templates.ts";
+import type { TemplateArtwork } from "./character-templates.ts";
+export { FILTERS } from "./filters.ts";
+export { COLORS } from "./frames.ts";
+export type { Filter } from "./filters.ts";
+export type { FrameStyle, Sticker } from "./frames.ts";
 export type Layout = "strip" | "grid";
-export type Filter = "original" | "mono" | "film" | "warm";
-export type Sticker = "none" | "stars" | "hearts" | "flowers";
 export interface PhotoCrop { x: number; y: number; zoom: number }
 export const DEFAULT_CROP: PhotoCrop = { x: .5, y: .5, zoom: 1 };
 export interface Photo { id: string; source: string; crop?: PhotoCrop }
 export interface Design {
+  template: TemplateId;
   layout: Layout;
   filter: Filter;
+  filterStrength: number;
+  frame: FrameStyle;
   color: string;
   caption: string;
   date: string;
   showDate: boolean;
   sticker: Sticker;
 }
-
-export const FILTERS: { id: Filter; name: string; css: string }[] = [
-  { id: "original", name: "Tự nhiên", css: "none" },
-  { id: "mono", name: "Đen trắng", css: "grayscale(1)" },
-  { id: "film", name: "Film", css: "sepia(.35) saturate(.8) contrast(.95)" },
-  { id: "warm", name: "Nắng ấm", css: "sepia(.2) saturate(1.3) brightness(1.05)" },
-];
-export const COLORS = [
-  { value: "#fffdf8", name: "Trắng kem" },
-  { value: "#e9e2ff", name: "Tím lavender" },
-  { value: "#dcece0", name: "Xanh matcha" },
-  { value: "#f7dde4", name: "Hồng phấn" },
-  { value: "#faedbb", name: "Vàng bơ" },
-  { value: "#25252d", name: "Đen" },
-];
 
 export function getGeometry(layout: Layout) {
   const width = layout === "strip" ? 1200 : 1600;
@@ -73,79 +67,101 @@ export function movePhoto(photos: Photo[], from: number, to: number): Photo[] {
 }
 
 // Pixel math also works in browsers without CanvasRenderingContext2D.filter.
-function filterPixels(ctx: CanvasRenderingContext2D, filter: Filter, x: number, y: number, width: number, height: number) {
-  if (filter === "original") return;
+function filterPixels(ctx: CanvasRenderingContext2D, filter: Filter, x: number, y: number, width: number, height: number, strength: number) {
+  if (filter === "original" || strength === 0) return;
   const image = ctx.getImageData(x, y, width, height);
-  const pixels = image.data;
-  for (let i = 0; i < pixels.length; i += 4) {
-    let r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
-    if (filter === "mono") {
-      r = g = b = .2126 * r + .7152 * g + .0722 * b;
-    } else {
-      const sepia = filter === "film" ? .35 : .2;
-      const sr = Math.min(255, .393 * r + .769 * g + .189 * b);
-      const sg = Math.min(255, .349 * r + .686 * g + .168 * b);
-      const sb = Math.min(255, .272 * r + .534 * g + .131 * b);
-      r += (sr - r) * sepia; g += (sg - g) * sepia; b += (sb - b) * sepia;
-      const luminance = .213 * r + .715 * g + .072 * b;
-      const saturation = filter === "film" ? .8 : 1.3;
-      r = luminance + (r - luminance) * saturation;
-      g = luminance + (g - luminance) * saturation;
-      b = luminance + (b - luminance) * saturation;
-      if (filter === "film") { r = (r - 127.5) * .95 + 127.5; g = (g - 127.5) * .95 + 127.5; b = (b - 127.5) * .95 + 127.5; }
-      else { r *= 1.05; g *= 1.05; b *= 1.05; }
-    }
-    pixels[i] = r; pixels[i + 1] = g; pixels[i + 2] = b;
-  }
+  applyFilterPixels(image.data, filter, strength);
   ctx.putImageData(image, x, y);
 }
 
-function decoration(ctx: CanvasRenderingContext2D, sticker: Sticker, x: number, y: number, size: number, rotation: number) {
-  ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
-  if (sticker === "stars") {
-    ctx.fillStyle = "#d6ab3d";
-    ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const a = i * Math.PI / 4 - Math.PI / 2;
-      const radius = i % 2 === 0 ? size : size * .24;
-      if (i === 0) ctx.moveTo(Math.cos(a) * radius, Math.sin(a) * radius);
-      else ctx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius);
+const artworkCache = new Map<string, Promise<HTMLImageElement>>();
+function loadArtwork(artwork: TemplateArtwork[]) {
+  return Promise.all(artwork.map(asset => {
+    let pending = artworkCache.get(asset.source);
+    if (!pending) {
+      pending = loadImage(asset.source); artworkCache.set(asset.source, pending);
+      void pending.catch(() => artworkCache.delete(asset.source));
     }
-    ctx.closePath(); ctx.fill();
-  } else if (sticker === "hearts") {
-    ctx.fillStyle = "#c97186";
-    ctx.beginPath(); ctx.moveTo(0, size * .7);
-    ctx.bezierCurveTo(-size * 1.8, -size * .25, -size * .6, -size * 1.5, 0, -size * .55);
-    ctx.bezierCurveTo(size * .6, -size * 1.5, size * 1.8, -size * .25, 0, size * .7); ctx.fill();
-  } else if (sticker === "flowers") {
-    ctx.fillStyle = "#b5a4df";
-    for (let i = 0; i < 6; i++) {
-      const a = i * Math.PI / 3;
-      ctx.beginPath(); ctx.ellipse(Math.cos(a) * size * .5, Math.sin(a) * size * .5, size * .5, size * .35, a, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.fillStyle = "#f6d56c"; ctx.beginPath(); ctx.arc(0, 0, size * .28, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.restore();
+    return pending;
+  }));
+}
+function drawArtwork(ctx: CanvasRenderingContext2D, artwork: TemplateArtwork[], images: HTMLImageElement[]) {
+  artwork.forEach((asset, index) => {
+    const image = images[index];
+    const scale = Math.min(asset.width / image.naturalWidth, asset.height / image.naturalHeight);
+    const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+    ctx.drawImage(image, asset.x + (asset.width - width) / 2, asset.y + (asset.height - height) / 2, width, height);
+  });
 }
 
-export async function renderPhoto(canvas: HTMLCanvasElement, photos: Photo[], design: Design) {
+export async function renderTemplatePreview(canvas: HTMLCanvasElement, design: Design, previewWidth = 240) {
+  if (design.template === "custom") throw new Error("Hãy chọn một mẫu để xem trước.");
+  const scene = getTemplateScene(design.template, design.layout, design);
+  const [base, overlay, artworkImages] = await Promise.all([loadImage(svgDataUrl(scene.previewBase)), loadImage(svgDataUrl(scene.overlay)), loadArtwork(scene.artwork)]);
+  const scale = Math.min(1, previewWidth / scene.width);
+  const buffer = document.createElement("canvas");
+  buffer.width = Math.round(scene.width * scale); buffer.height = Math.round(scene.height * scale);
+  const ctx = buffer.getContext("2d");
+  if (!ctx) throw new Error("Không thể tạo ảnh xem trước.");
+  ctx.scale(scale, scale); ctx.drawImage(base, 0, 0, scene.width, scene.height);
+  drawArtwork(ctx, scene.artwork, artworkImages); ctx.drawImage(overlay, 0, 0, scene.width, scene.height);
+  canvas.width = buffer.width; canvas.height = buffer.height;
+  const target = canvas.getContext("2d");
+  if (!target) throw new Error("Không thể tạo ảnh xem trước.");
+  target.drawImage(buffer, 0, 0);
+}
+
+export async function renderPhoto(canvas: HTMLCanvasElement, photos: Photo[], design: Design, previewWidth?: number) {
   if (photos.length !== 4) throw new Error("Cần đủ 4 ảnh để tạo thành phẩm.");
   const images = await Promise.all(photos.map(photo => loadImage(photo.source)));
+  if (design.template && design.template !== "custom") {
+    const scene = getTemplateScene(design.template, design.layout, design);
+    const [background, overlay, artworkImages] = await Promise.all([loadImage(svgDataUrl(scene.background)), loadImage(svgDataUrl(scene.overlay)), loadArtwork(scene.artwork)]);
+    const scale = previewWidth ? Math.min(1, previewWidth / scene.width) : 1;
+    const buffer = document.createElement("canvas");
+    buffer.width = Math.round(scene.width * scale); buffer.height = Math.round(scene.height * scale);
+    const ctx = buffer.getContext("2d");
+    if (!ctx) throw new Error("Trình duyệt không hỗ trợ xử lý ảnh.");
+    ctx.scale(scale, scale); ctx.drawImage(background, 0, 0, scene.width, scene.height);
+    scene.slots.forEach((slot, index) => {
+      const photo = document.createElement("canvas");
+      photo.width = Math.max(1, Math.round(slot.width * scale)); photo.height = Math.max(1, Math.round(slot.height * scale));
+      const photoCtx = photo.getContext("2d");
+      if (!photoCtx) throw new Error("Không thể tạo ảnh xem trước.");
+      const image = images[index];
+      drawCover(photoCtx, image, image.naturalWidth, image.naturalHeight, 0, 0, photo.width, photo.height, photos[index].crop);
+      filterPixels(photoCtx, design.filter, 0, 0, photo.width, photo.height, design.filterStrength);
+      ctx.save(); ctx.translate(slot.x + slot.width / 2, slot.y + slot.height / 2); ctx.rotate(slot.rotation * Math.PI / 180);
+      ctx.beginPath(); ctx.roundRect(-slot.width / 2, -slot.height / 2, slot.width, slot.height, slot.radius); ctx.clip();
+      ctx.drawImage(photo, -slot.width / 2, -slot.height / 2, slot.width, slot.height); ctx.restore();
+    });
+    drawArtwork(ctx, scene.artwork, artworkImages);
+    ctx.drawImage(overlay, 0, 0, scene.width, scene.height);
+    if (design.sticker !== "none") {
+      drawSticker(ctx, design.sticker, 90, scene.height - 110, 40, -.2);
+      drawSticker(ctx, design.sticker, scene.width - 60, 140, 30, .15);
+    }
+    canvas.width = buffer.width; canvas.height = buffer.height;
+    const target = canvas.getContext("2d");
+    if (!target) throw new Error("Không thể tạo ảnh xem trước.");
+    target.drawImage(buffer, 0, 0);
+    return;
+  }
   const g = getGeometry(design.layout);
   // Render offscreen, then commit once. Fast edits cannot expose a half-painted image.
   const buffer = document.createElement("canvas");
   buffer.width = g.width; buffer.height = g.height;
   const ctx = buffer.getContext("2d");
   if (!ctx) throw new Error("Trình duyệt không hỗ trợ xử lý ảnh.");
-  ctx.fillStyle = design.color; ctx.fillRect(0, 0, g.width, g.height);
+  drawFrame(ctx, g, design.color, design.frame);
   images.forEach((image, i) => {
     const x = g.margin + (i % g.columns) * (g.photoWidth + g.gap);
     const y = g.margin + Math.floor(i / g.columns) * (g.photoHeight + g.gap);
     drawCover(ctx, image, image.naturalWidth, image.naturalHeight, x, y, g.photoWidth, g.photoHeight, photos[i].crop);
-    filterPixels(ctx, design.filter, x, y, g.photoWidth, g.photoHeight);
+    filterPixels(ctx, design.filter, x, y, g.photoWidth, g.photoHeight, design.filterStrength);
   });
-  const dark = design.color === "#25252d";
-  ctx.fillStyle = dark ? "#fffdf8" : "#464152";
+  const palette = getFramePalette(design.color);
+  ctx.fillStyle = palette.ink;
   ctx.textAlign = "center";
   ctx.font = "600 42px Arial, sans-serif";
   const caption = design.caption.trim() || "một chút. thật vui.";
@@ -155,12 +171,12 @@ export async function renderPhoto(canvas: HTMLCanvasElement, photos: Photo[], de
   }
   ctx.fillText(caption, g.width / 2, g.height - 121);
   ctx.font = "24px Arial, sans-serif";
-  ctx.fillStyle = dark ? "#c9c4d1" : "#81798d";
+  ctx.fillStyle = palette.muted;
   ctx.fillText(design.showDate ? `${design.date}  ·  một chút.` : "made with một chút.", g.width / 2, g.height - 65);
   if (design.sticker !== "none") {
-    decoration(ctx, design.sticker, 66, 65, 44, -.25);
-    decoration(ctx, design.sticker, g.width - 65, g.height - 193, 48, .2);
-    decoration(ctx, design.sticker, g.width - 68, 66 + g.photoHeight, 32, .1);
+    drawSticker(ctx, design.sticker, 66, 65, 44, -.25);
+    drawSticker(ctx, design.sticker, g.width - 65, g.height - 193, 48, .2);
+    drawSticker(ctx, design.sticker, g.width - 68, 66 + g.photoHeight, 32, .1);
   }
   canvas.width = g.width; canvas.height = g.height;
   const target = canvas.getContext("2d");

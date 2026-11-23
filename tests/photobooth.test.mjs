@@ -2,6 +2,8 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
+import { FRAMES } from "../src/lib/frames.ts";
+import { TEMPLATES } from "../src/lib/templates.ts";
 
 const base = process.env.TEST_BASE_URL || "http://127.0.0.1:3000";
 let browser;
@@ -14,13 +16,14 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function open(options = {}) {
+async function open(options = {}, curated = false) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, ...options });
   const errors = [];
   const page = await context.newPage();
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(base);
   await page.getByRole("button", { name: "Cách chụp", exact: true }).waitFor();
+  if (!curated) await page.getByRole("button", { name: "Tự phối khung", exact: true }).click();
   return { context, page, errors };
 }
 
@@ -45,6 +48,14 @@ async function waitForPreview(page) {
   });
 }
 
+async function setInputValue(page, selector, value) {
+  await page.locator(selector).evaluate((input, value) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
+}
+
 test("initial studio, private processing information and keyboard dialog", async () => {
   const { page, context, errors } = await open();
   assert.equal(await page.getByRole("button", { name: /Bắt đầu chụp/ }).isDisabled(), true);
@@ -62,7 +73,7 @@ test("upload, decorate and export real PNG/JPG with correct dimensions", async (
   const { page, context, errors } = await open();
   await page.locator('input[type="file"]').setInputFiles(await fixtures(page));
   await waitForPreview(page);
-  let geometry = await page.locator("canvas").evaluate(canvas => [canvas.width, canvas.height]);
+  let geometry = await page.getByTestId("result-canvas").evaluate(canvas => [canvas.width, canvas.height]);
   assert.deepEqual(geometry, [1200, 3044]);
   await page.getByRole("button", { name: "Lưới 2 × 2", exact: true }).click();
   await page.getByRole("button", { name: "Khung Tím lavender" }).click();
@@ -70,9 +81,9 @@ test("upload, decorate and export real PNG/JPG with correct dimensions", async (
   await page.getByRole("button", { name: "Lấp lánh", exact: true }).click();
   await page.getByRole("button", { name: "Đen trắng", exact: true }).click();
   await waitForPreview(page);
-  geometry = await page.locator("canvas").evaluate(canvas => [canvas.width, canvas.height]);
+  geometry = await page.getByTestId("result-canvas").evaluate(canvas => [canvas.width, canvas.height]);
   assert.deepEqual(geometry, [1600, 1206]);
-  const pixels = await page.locator("canvas").evaluate(canvas => {
+  const pixels = await page.getByTestId("result-canvas").evaluate(canvas => {
     const ctx = canvas.getContext("2d");
     return { border: [...ctx.getImageData(5, 5, 1, 1).data], photo: [...ctx.getImageData(140, 150, 1, 1).data] };
   });
@@ -116,8 +127,8 @@ test("individual framing is reversible and moves with its photo", async () => {
   await page.getByRole("button", { name: "Chỉnh khung hình ảnh 1", exact: true }).click();
   await page.getByRole("slider", { name: /Phóng to/ }).waitFor();
   await page.waitForFunction(() => !document.querySelector(".crop-controls").disabled);
-  await page.locator("#crop-zoom").fill("2");
-  await page.locator("#crop-y").fill("100");
+  await setInputValue(page, "#crop-zoom", "2");
+  await setInputValue(page, "#crop-y", "100");
   await page.screenshot({ path: "test-results/photo-editor-mobile.png", fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.getByRole("button", { name: "Áp dụng", exact: true }).click();
@@ -142,6 +153,155 @@ test("individual framing is reversible and moves with its photo", async () => {
   assert.deepEqual(reordered, [originals[1], originals[2], originals[3], originals[0]]);
   const last = await page.getByTestId("result-canvas").evaluate(canvas => [...canvas.getContext("2d").getImageData(600, 2500, 1, 1).data]);
   assert.ok(last[2] > 180 && last[0] < 70, "framing follows the moved photo");
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("extended filters support groups, intensity and custom frame colors on mobile", async () => {
+  const { page, context, errors } = await open({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await page.locator('input[type="file"]').setInputFiles(await fixtures(page));
+  await waitForPreview(page);
+  assert.equal(await page.locator(".filter-options button").count(), 16);
+  assert.equal(await page.locator(".color-swatch").count(), 24);
+  const samplePixel = () => page.getByTestId("result-canvas").evaluate(canvas => [...canvas.getContext("2d").getImageData(300, 200, 1, 1).data]);
+  const original = await samplePixel();
+  await page.getByRole("button", { name: "Hoài cổ", exact: true }).click();
+  assert.equal(await page.locator(".filter-options button").count(), 4);
+  await page.getByRole("button", { name: "Nâu xưa", exact: true }).click();
+  await waitForPreview(page);
+  const sepia = await samplePixel();
+  assert.ok(sepia[0] > sepia[1] && sepia[1] > sepia[2]);
+  await page.getByRole("button", { name: "Đơn sắc", exact: true }).click();
+  await page.getByRole("button", { name: "Noir", exact: true }).click();
+  await waitForPreview(page);
+  const mono = await samplePixel();
+  assert.equal(mono[0], mono[1]); assert.equal(mono[1], mono[2]);
+  await setInputValue(page, "#filter-strength", "0");
+  await waitForPreview(page);
+  assert.deepEqual(await samplePixel(), original);
+  await setInputValue(page, "#custom-frame-color", "#123456");
+  await waitForPreview(page);
+  const border = await page.getByTestId("result-canvas").evaluate(canvas => [...canvas.getContext("2d").getImageData(5, 5, 1, 1).data]);
+  assert.deepEqual(border, [18, 52, 86, 255]);
+  await page.getByRole("button", { name: "Viền Nơ xinh", exact: true }).click();
+  await page.getByRole("button", { name: "Cánh bướm", exact: true }).click();
+  await waitForPreview(page);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: "test-results/decorations-mobile.png", fullPage: true });
+  await page.getByRole("button", { name: "Ưng rồi, lưu ảnh thôi" }).click();
+  await page.waitForFunction(() => !document.querySelector(".render-status"));
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Tải ảnh PNG", exact: true }).click();
+  assert.match((await downloadPromise).suggestedFilename(), /\.png$/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("all border styles render distinctly and preserve photo pixels in both layouts", { timeout: 45000 }, async () => {
+  const { page, context, errors } = await open();
+  await page.locator('input[type="file"]').setInputFiles(await fixtures(page));
+  await waitForPreview(page);
+  for (const layout of ["Dải ảnh dọc", "Lưới 2 × 2"]) {
+    await page.getByRole("button", { name: layout, exact: true }).click();
+    await page.getByRole("button", { name: "Viền Tối giản", exact: true }).click();
+    await waitForPreview(page);
+    const original = await page.getByTestId("result-canvas").evaluate(canvas => [...canvas.getContext("2d").getImageData(300, 200, 1, 1).data]);
+    const signatures = new Set();
+    for (const frame of FRAMES) {
+      await page.getByRole("button", { name: `Viền ${frame.name}`, exact: true }).click();
+      await waitForPreview(page);
+      const result = await page.getByTestId("result-canvas").evaluate(canvas => {
+        const reduced = document.createElement("canvas"); reduced.width = 240; reduced.height = 320;
+        reduced.getContext("2d").drawImage(canvas, 0, 0, 240, 320);
+        return { signature: reduced.toDataURL(), pixel: [...canvas.getContext("2d").getImageData(300, 200, 1, 1).data] };
+      });
+      assert.deepEqual(result.pixel, original, `${frame.id} must leave the photo unchanged`);
+      signatures.add(result.signature);
+    }
+    assert.equal(signatures.size, FRAMES.length, `${layout}: every style should have different border details`);
+  }
+  await page.screenshot({ path: "test-results/decorations-desktop.png", fullPage: true });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("larger template library supports search, collections and new designs on mobile", async () => {
+  const { page, context, errors } = await open({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, true);
+  assert.equal(await page.locator(".template-gallery .template-card").count(), 0, "closed gallery should not build every preview");
+  await page.getByRole("button", { name: "Chọn mẫu khung", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Một khung hình, một câu chuyện." });
+  assert.equal(await dialog.locator(".template-card").count(), TEMPLATES.length);
+  assert.equal(await dialog.locator(".template-new").count(), TEMPLATES.filter(template => template.isNew).length);
+  const search = dialog.getByRole("searchbox", { name: "Tìm mẫu bạn thích" });
+  await search.fill("dien anh");
+  assert.equal(await dialog.locator(".template-card").count(), 1);
+  assert.equal(await dialog.getByRole("button", { name: "Mẫu Suất chiếu đôi mình", exact: true }).isVisible(), true);
+  await search.fill("tet");
+  assert.equal(await dialog.locator(".template-card").count(), 1);
+  await search.fill("");
+  await dialog.getByRole("button", { name: "Lễ hội", exact: true }).click();
+  assert.equal(await dialog.locator(".template-card").count(), 2);
+  await search.fill("unknown-template-123");
+  assert.equal(await dialog.locator(".template-card").count(), 0);
+  await dialog.getByRole("button", { name: "Xem tất cả mẫu", exact: true }).click();
+  assert.equal(await dialog.locator(".template-card").count(), TEMPLATES.length);
+  await dialog.getByRole("button", { name: "Cartoon", exact: true }).click();
+  assert.equal(await dialog.locator(".template-card").count(), TEMPLATES.filter(template => template.group === "Cartoon").length);
+  await search.fill("tiem banh");
+  assert.equal(await dialog.locator(".template-card").count(), 1);
+  await page.waitForFunction(() => document.querySelectorAll('.template-gallery .template-art canvas:not([hidden])').length === 1);
+  assert.equal(await dialog.getByRole("button", { name: "Mẫu Tiệm bánh mùa đông", exact: true }).isVisible(), true);
+  await search.fill("gau");
+  assert.equal(await dialog.locator(".template-card").count(), 1);
+  assert.equal(await dialog.getByRole("button", { name: "Mẫu Gấu đi picnic", exact: true }).isVisible(), true);
+  await search.fill("");
+  await dialog.getByRole("button", { name: "Tất cả", exact: true }).click();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await dialog.getByRole("button", { name: "Mẫu Tết sum vầy", exact: true }).click();
+  assert.match(await page.locator(".active-template-copy strong").innerText(), /Tết sum vầy/);
+  assert.equal(await page.locator(".template-gallery .template-card").count(), 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("curated collection uses visitor photos and exports every template in both layouts", { timeout: 120000 }, async () => {
+  const { page, context, errors } = await open({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, true);
+  await page.locator('input[type="file"]').setInputFiles(await fixtures(page));
+  await waitForPreview(page);
+  const sources = await page.locator(".photo-slot img").evaluateAll(images => images.map(image => image.src));
+  await page.getByLabel("Lời nhắn nhỏ", { exact: false }).fill("Chúng mình ♡");
+  for (const layout of ["Dải ảnh dọc", "Lưới 2 × 2"]) {
+    await page.getByRole("button", { name: layout, exact: true }).click();
+    const signatures = new Set();
+    for (const template of TEMPLATES) {
+      await page.getByRole("button", { name: "Chọn mẫu khung", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "Một khung hình, một câu chuyện." });
+      await dialog.waitFor();
+      assert.equal(await dialog.locator(".template-card").count(), TEMPLATES.length);
+      await page.waitForFunction(() => document.querySelectorAll('.template-gallery .template-art canvas:not([hidden])').length > 0);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      if (template.id === "coquette") await page.screenshot({ path: `test-results/template-gallery-${layout === "Dải ảnh dọc" ? "strip" : "grid"}.png`, fullPage: true });
+      await dialog.getByRole("button", { name: `Mẫu ${template.name}`, exact: true }).click();
+      await waitForPreview(page);
+      const result = await page.getByTestId("result-canvas").evaluate(canvas => {
+        const thumb = document.createElement("canvas"); thumb.width = 120; thumb.height = 200;
+        thumb.getContext("2d").drawImage(canvas, 0, 0, 120, 200);
+        return { size: [canvas.width, canvas.height], signature: thumb.toDataURL() };
+      });
+      assert.deepEqual(result.size, layout === "Dải ảnh dọc" ? [1200, 3044] : [1600, 1206]);
+      signatures.add(result.signature);
+    }
+    assert.equal(signatures.size, TEMPLATES.length);
+  }
+  assert.deepEqual(await page.locator(".photo-slot img").evaluateAll(images => images.map(image => image.src)), sources);
+  assert.equal(await page.getByLabel("Lời nhắn nhỏ", { exact: false }).inputValue(), "Chúng mình ♡");
+  await page.getByRole("button", { name: "Ưng rồi, lưu ảnh thôi" }).click();
+  await page.waitForFunction(() => !document.querySelector(".render-status"));
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Tải ảnh PNG", exact: true }).click();
+  const png = await readFile(await (await downloadPromise).path());
+  assert.equal(png.subarray(1, 4).toString(), "PNG");
+  assert.equal(png.readUInt32BE(16), 1600); assert.equal(png.readUInt32BE(20), 1206);
   assert.deepEqual(errors, []);
   await context.close();
 });

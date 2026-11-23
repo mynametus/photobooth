@@ -1,16 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import Icon from "./icon";
 import PhotoEditor from "./photo-editor";
-import { COLORS, FILTERS, canvasBlob, drawCover, getGeometry, importPhoto, movePhoto, normalizeCrop, renderPhoto, type Design, type Photo, type Sticker } from "@/lib/photo";
+import DesignControls, { FilterDefinitions } from "./design-controls";
+import TemplateGallery from "./template-gallery";
+import SupportCoffee from "./support-coffee";
+import { TEMPLATES } from "@/lib/templates";
+import { FRAMES } from "@/lib/frames";
+import { COLORS, FILTERS, canvasBlob, drawCover, getGeometry, importPhoto, movePhoto, normalizeCrop, renderPhoto, type Design, type Photo } from "@/lib/photo";
 
 type CameraStatus = "off" | "requesting" | "active";
 const POSES = ["Một nụ cười thật tự nhiên nhé!", "Thử nghiêng đầu một chút nào.", "Một chiếc trái tim dành cho bạn!", "Tấm cuối rồi, cứ là chính mình."];
-const STICKERS: { id: Sticker; name: string; symbol: string }[] = [
-  { id: "none", name: "Không", symbol: "—" }, { id: "stars", name: "Lấp lánh", symbol: "✦" },
-  { id: "hearts", name: "Trái tim", symbol: "♡" }, { id: "flowers", name: "Hoa nhỏ", symbol: "✿" },
-];
 
 function pause(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -28,7 +29,7 @@ function LayoutMini({ grid = false }: { grid?: boolean }) {
 export default function Photobooth() {
   const [step, setStep] = useState(1);
   const [photos, setPhotos] = useState<(Photo | null)[]>([null, null, null, null]);
-  const [design, setDesign] = useState<Design>({ layout: "strip", filter: "original", color: COLORS[0].value, caption: "", date: "", showDate: true, sticker: "none" });
+  const [design, setDesign] = useState<Design>({ template: "coquette", layout: "strip", filter: "cream", filterStrength: .6, frame: "plain", color: TEMPLATES[0].color, caption: "", date: "", showDate: true, sticker: "none" });
   const [seconds, setSeconds] = useState(3);
   const [mirror, setMirror] = useState(true);
   const [sound, setSound] = useState(false);
@@ -66,6 +67,8 @@ export default function Photobooth() {
   const busy = capturing || importing;
   const previewReady = rendered?.design === design && rendered?.photos === photos;
   const filter = FILTERS.find(item => item.id === design.filter)!;
+  const filterPrefix = `photo-filter-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const previewFilter = design.filter === "original" || design.filterStrength === 0 ? "none" : `url(#${filterPrefix}-current)`;
 
   useEffect(() => {
     setDesign(current => ({ ...current, date: new Intl.DateTimeFormat("vi-VN").format(new Date()) }));
@@ -277,6 +280,7 @@ export default function Photobooth() {
 
   const g = getGeometry(design.layout);
   return <>
+    <FilterDefinitions prefix={filterPrefix} filter={design.filter} strength={design.filterStrength}/>
     <header className="site-header">
       <a className="brand" href="/" aria-label="Một chút — Trang chủ"><span className="brand-mark"><i/><i/><i/><i/></span>một chút<span className="brand-dot">.</span></a>
       <nav aria-label="Điều hướng chính"><a href="#studio" className="nav-active">Studio</a><button onClick={() => setDialog("help")}>Cách chụp</button></nav>
@@ -302,7 +306,7 @@ export default function Photobooth() {
             <div className="workspace-label"><span className="flex items-center gap-2"><Icon name={step === 1 ? "camera" : "image"} size={17}/>{step === 1 ? "Góc nhỏ của bạn" : "Kỷ niệm của bạn"}</span><span className={`camera-state ${ready ? "on" : ""}`}><i/>{step !== 1 ? "Ảnh xem trước" : camera === "requesting" ? "Đang kết nối" : ready ? "Camera đã sẵn sàng" : "Camera chưa bật"}</span></div>
 
             {step === 1 ? <div className={`viewfinder ${ready ? "live" : ""}`}>
-              <video ref={videoRef} autoPlay playsInline muted onLoadedData={() => setReady(true)} onError={() => { setError("Camera không phát được hình. Hãy bật lại camera hoặc tải ảnh."); stopCamera(); }} style={{ transform: mirror ? "scaleX(-1)" : "none", filter: filter.css, opacity: ready ? 1 : 0 }} aria-label="Hình ảnh trực tiếp từ camera"/>
+              <video ref={videoRef} autoPlay playsInline muted onLoadedData={() => setReady(true)} onError={() => { setError("Camera không phát được hình. Hãy bật lại camera hoặc tải ảnh."); stopCamera(); }} style={{ transform: mirror ? "scaleX(-1)" : "none", filter: previewFilter, opacity: ready ? 1 : 0 }} aria-label="Hình ảnh trực tiếp từ camera"/>
               {!ready && <div className="camera-placeholder"><div className="camera-art" aria-hidden="true"><span className="art-spark one">✦</span><Icon name="camera" size={62}/><span className="art-spark two">✧</span><span className="art-heart">♡</span></div><h2>{camera === "requesting" ? "Chờ camera một chút nhé…" : "Xin chào, người đáng yêu!"}</h2><p>{camera === "requesting" ? "Cho phép truy cập camera trong trình duyệt để bắt đầu." : "Bật camera, thả lỏng và cứ là chính mình."}</p><button className="primary-button camera-start" onClick={() => void startCamera()} disabled={camera === "requesting" || busy}><Icon name="camera" size={18}/>{camera === "requesting" ? "Đang chờ cấp quyền…" : "Bật camera"}</button><span className="permission-note">Chỉ sử dụng camera, không thu âm</span></div>}
               <div className="viewfinder-corner tl"/><div className="viewfinder-corner tr"/><div className="viewfinder-corner bl"/><div className="viewfinder-corner br"/>
               {ready && !capturing && <span className="live-label">{retake !== null ? `Chụp lại ảnh ${retake + 1}` : "Một nụ cười là đủ xinh"}</span>}
@@ -317,7 +321,7 @@ export default function Photobooth() {
               const crop = normalizeCrop(photo?.crop);
               const origin = `${crop.x * 100}% ${crop.y * 100}%`;
               return <div className="photo-card" key={index}><button className={`photo-slot ${photo ? "filled" : ""} ${retake === index ? "retaking" : ""} ${capturing && shot === index ? "shooting" : ""}`} disabled={busy} onClick={() => photo ? chooseRetake(index) : chooseUpload(index)} aria-label={photo ? `Chụp lại ảnh ${index + 1}` : `Thêm ảnh ${index + 1}`}>
-                {photo ? <><img src={photo.source} alt={`Ảnh ${index + 1} đã chụp`} style={{ filter: filter.css, objectPosition: origin, transformOrigin: origin, transform: `scale(${crop.zoom})` }}/><span className="retake-label"><Icon name="refresh" size={15}/>Chụp lại</span></> : <><Icon name="image" size={22}/><span>Ảnh {index + 1}</span></>}
+                {photo ? <><img src={photo.source} alt={`Ảnh ${index + 1} đã chụp`} style={{ filter: previewFilter, objectPosition: origin, transformOrigin: origin, transform: `scale(${crop.zoom})` }}/><span className="retake-label"><Icon name="refresh" size={15}/>Chụp lại</span></> : <><Icon name="image" size={22}/><span>Ảnh {index + 1}</span></>}
                 <small>{String(index + 1).padStart(2, "0")}</small></button>
                 {step === 2 && photo && <button className="photo-edit-button" onClick={() => setEditing(index)} aria-label={`Chỉnh khung hình ảnh ${index + 1}`}><Icon name="image" size={15}/>Chỉnh ảnh</button>}
               </div>;
@@ -330,16 +334,15 @@ export default function Photobooth() {
 
           <aside className="settings-panel" aria-label="Tùy chỉnh ảnh"><div className="panel-heading"><span className="panel-icon"><Icon name={step === 3 ? "download" : "sparkles"} size={20}/></span><div><h2>{step === 3 ? "Mang kỷ niệm về" : "Thêm một chút riêng"}</h2><p>{step === 3 ? "Ảnh xinh đã sẵn sàng rồi." : "Chiếc ảnh này mang màu sắc của bạn."}</p></div></div>
             {step !== 3 ? <>
-              <fieldset className="setting-section" disabled={busy}><legend>Bố cục ảnh<span>4 khoảnh khắc</span></legend><div className="layout-options">{(["strip", "grid"] as const).map(layout => <button key={layout} onClick={() => setDesign({ ...design, layout })} aria-pressed={design.layout === layout} className={`layout-option ${design.layout === layout ? "chosen" : ""}`}><LayoutMini grid={layout === "grid"}/><span>{layout === "strip" ? "Dải ảnh dọc" : "Lưới 2 × 2"}</span>{design.layout === layout && <span className="choice-check"><Icon name="check" size={11}/></span>}</button>)}</div></fieldset>
-              <fieldset className="setting-section" disabled={busy}><legend>Bộ lọc<span>Mood hôm nay?</span></legend><div className="filter-options">{FILTERS.map(item => <button key={item.id} aria-pressed={design.filter === item.id} onClick={() => setDesign({ ...design, filter: item.id })} className={`filter-option ${design.filter === item.id ? "chosen" : ""}`}><span className={`filter-sample ${item.id}`} style={{ filter: item.css }}><span className="sample-sun"/><span className="sample-mountain"/></span><span>{item.name}</span></button>)}</div></fieldset>
-              <fieldset className="setting-section" disabled={busy}><legend>Màu khung<span>{COLORS.find(color => color.value === design.color)?.name}</span></legend><div className="color-options">{COLORS.map(color => <button key={color.value} aria-label={`Khung ${color.name}`} aria-pressed={design.color === color.value} className={`color-swatch ${design.color === color.value ? "chosen" : ""}`} style={{ background: color.value, color: color.value === "#25252d" ? "white" : "#534866" }} onClick={() => setDesign({ ...design, color: color.value })}>{design.color === color.value && <Icon name="check" size={17}/>}</button>)}</div></fieldset>
-              <fieldset className="setting-section" disabled={busy}><legend>Chút đáng yêu</legend><div className="sticker-options">{STICKERS.map(sticker => <button key={sticker.id} aria-pressed={design.sticker === sticker.id} className={design.sticker === sticker.id ? "chosen" : ""} onClick={() => setDesign({ ...design, sticker: sticker.id })}><span>{sticker.symbol}</span>{sticker.name}</button>)}</div></fieldset>
+              <TemplateGallery design={design} photos={photos} onChange={setDesign} busy={busy}/>
+              <fieldset className="setting-section layout-section" disabled={busy}><legend>Bố cục ảnh<span>4 khoảnh khắc</span></legend><div className="layout-options">{(["strip", "grid"] as const).map(layout => <button key={layout} onClick={() => setDesign({ ...design, layout })} aria-pressed={design.layout === layout} className={`layout-option ${design.layout === layout ? "chosen" : ""}`}><LayoutMini grid={layout === "grid"}/><span>{layout === "strip" ? "Dải ảnh dọc" : "Lưới 2 × 2"}</span>{design.layout === layout && <span className="choice-check"><Icon name="check" size={11}/></span>}</button>)}</div></fieldset>
+              <details className="design-tuning" open={design.template === "custom" ? true : undefined}><summary>Tinh chỉnh màu &amp; bộ lọc</summary><DesignControls design={design} onChange={setDesign} busy={busy} sample={photos.find(photo => photo !== null) ?? null} filterPrefix={filterPrefix}/></details>
               <div className="setting-section caption-section"><label htmlFor="caption">Lời nhắn nhỏ<span>{design.caption.length}/50</span></label><input id="caption" maxLength={50} placeholder="một chút. thật vui." value={design.caption} onChange={e => setDesign({ ...design, caption: e.target.value })} disabled={busy}/><label className="checkbox-label"><input type="checkbox" checked={design.showDate} onChange={e => setDesign({ ...design, showDate: e.target.checked })} disabled={busy}/>In ngày chụp lên ảnh</label></div>
               {step === 1 ? <div className="panel-tip"><Icon name="sun" size={20}/><p>Một chút ánh sáng tự nhiên sẽ giúp ảnh của bạn xinh hơn đấy!</p></div> : <div className="panel-bottom"><button className="primary-button full-width" onClick={() => goToStep(3)} disabled={!previewReady || rendering || !!error}><Icon name="check" size={18}/>Ưng rồi, lưu ảnh thôi</button><button className="text-button" onClick={() => goToStep(1)}>Quay lại chụp ảnh</button></div>}
             </> : <>
               <div className="export-summary"><span className="export-check"><Icon name="check" size={25}/></span><h3>Một chiếc kỷ niệm xinh!</h3><p>4 khoảnh khắc, một câu chuyện của bạn.</p></div>
               <fieldset className="setting-section"><legend>Định dạng ảnh</legend><div className="format-options">{(["png", "jpeg"] as const).map(item => <button key={item} aria-pressed={format === item} className={format === item ? "chosen" : ""} onClick={() => setFormat(item)}><strong>{item === "png" ? "PNG" : "JPG"}</strong><span>{item === "png" ? "Giữ nét đẹp nhất" : "Dễ dàng chia sẻ"}</span></button>)}</div></fieldset>
-              <dl className="export-details"><div><dt>Kích thước</dt><dd>{g.width} × {g.height} px</dd></div><div><dt>Bố cục</dt><dd>{design.layout === "strip" ? "Dải ảnh dọc" : "Lưới 2 × 2"}</dd></div><div><dt>Bộ lọc</dt><dd>{filter.name}</dd></div></dl>
+              <dl className="export-details"><div><dt>Kích thước</dt><dd>{g.width} × {g.height} px</dd></div><div><dt>Bố cục</dt><dd>{design.layout === "strip" ? "Dải ảnh dọc" : "Lưới 2 × 2"}</dd></div><div><dt>Bộ lọc</dt><dd>{filter.name}{design.filter !== "original" && ` · ${Math.round(design.filterStrength * 100)}%`}</dd></div><div><dt>Mẫu ảnh</dt><dd>{TEMPLATES.find(template => template.id === design.template)?.name ?? `Tự phối · ${FRAMES.find(frame => frame.id === design.frame)?.name}`}</dd></div><div><dt>Màu nền</dt><dd>{COLORS.find(color => color.value === design.color)?.name ?? design.color.toUpperCase()}</dd></div></dl>
               <button className="primary-button full-width download-button" onClick={() => void download()} disabled={!previewReady || rendering || exporting || !!error}><Icon name="download" size={19}/>{exporting ? "Đang chuẩn bị ảnh…" : `Tải ảnh ${format === "png" ? "PNG" : "JPG"}`}</button><button className="text-button edit-back" onClick={() => goToStep(2)}>Chỉnh thêm một chút</button>
               <div className="save-tip"><Icon name="heart" size={22}/><p>Gửi cho người đã cùng bạn tạo nên khoảnh khắc này nhé.</p></div>
             </>}
@@ -351,10 +354,11 @@ export default function Photobooth() {
       </section>
 
       <section className="little-guide" aria-label="Ba bước đơn giản"><div><span className="guide-icon lilac"><Icon name="camera" size={21}/></span><div><h3>Cứ tự nhiên thôi</h3><p>Một mình hay cùng hội bạn đều vui.</p></div></div><div><span className="guide-icon pink"><Icon name="sparkles" size={21}/></span><div><h3>Thêm màu của bạn</h3><p>Chọn khung, bộ lọc và lời nhắn riêng.</p></div></div><div><span className="guide-icon yellow"><Icon name="download" size={21}/></span><div><h3>Giữ lại thật lâu</h3><p>Tải ảnh về, chia sẻ niềm vui.</p></div></div></section>
+      <SupportCoffee disabled={busy || exporting}/>
     </main>
 
     <footer className="site-footer"><a className="footer-brand" href="/">một chút.</a><p>Một chiếc photobooth nhỏ, những niềm vui to.</p><span>Made for your little happy moments <span className="footer-heart">♡</span></span></footer>
-    {editing !== null && photos[editing] && <PhotoEditor photo={photos[editing]} index={editing} filter={filter.css} onClose={() => setEditing(null)} onApply={applyPhotoEdit}/>}
+    {editing !== null && photos[editing] && <PhotoEditor photo={photos[editing]} index={editing} filter={previewFilter} onClose={() => setEditing(null)} onApply={applyPhotoEdit}/>}
     <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple={retake === null} onChange={e => void upload(e)} hidden aria-label="Chọn ảnh từ thiết bị"/>
     <dialog ref={dialogRef} className="info-dialog" onCancel={() => setDialog(null)} onClose={() => setDialog(null)} onClick={e => { if (e.target === e.currentTarget) setDialog(null); }}><div className="dialog-content"><button className="dialog-close" onClick={() => setDialog(null)} aria-label="Đóng"><Icon name="close"/></button><span className="dialog-icon"><Icon name={dialog === "privacy" ? "shield" : dialog === "reset" ? "refresh" : "camera"} size={28}/></span><h2>{dialog === "privacy" ? "Khoảnh khắc của riêng bạn" : dialog === "reset" ? "Bắt đầu một kỷ niệm mới?" : "Một chút hướng dẫn"}</h2>
       {dialog === "privacy" ? <><p>Ảnh được chụp, trang trí và ghép ngay trong trình duyệt. Website không tải ảnh của bạn lên máy chủ và không thu âm.</p><p>Ảnh chỉ nằm trong phiên đang mở. Tải ảnh về trước khi tải lại hoặc đóng trang nhé.</p><p>Camera tự tắt khi bạn chuyển sang trang trí hoặc rời tab.</p><button className="primary-button full-width" onClick={() => setDialog(null)}>Mình hiểu rồi</button></> : dialog === "reset" ? <><p>4 ảnh hiện tại sẽ được xóa khỏi phiên này. Nhớ tải thành phẩm về trước nếu bạn muốn giữ lại nhé.</p><div className="dialog-actions"><button className="secondary-button" onClick={() => setDialog(null)}>Giữ ảnh hiện tại</button><button className="primary-button" onClick={reset}>Bắt đầu lại</button></div></> : <><ol><li><strong>Sẵn sàng tạo dáng.</strong> Bật camera, cho phép truy cập và chọn đếm ngược 3 hoặc 5 giây.</li><li><strong>Chụp 4 khoảnh khắc.</strong> Máy tự chụp lần lượt. Chọn một ảnh đã chụp để chụp lại riêng tấm đó.</li><li><strong>Thêm chút riêng.</strong> Chọn bố cục, bộ lọc, màu khung, sticker và một lời nhắn.</li><li><strong>Lưu kỷ niệm.</strong> Tải PNG hoặc JPG về máy. Trên điện thoại, ảnh có thể nằm trong mục Tệp/Tải xuống.</li></ol><p>Không có camera? Chọn tối đa 4 ảnh JPG, PNG hoặc WebP từ thiết bị, mỗi ảnh dưới 20 MB.</p><button className="primary-button full-width" onClick={() => setDialog(null)}>Sẵn sàng rồi!</button></>}

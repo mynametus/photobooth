@@ -1,4 +1,4 @@
-type Name = "camera" | "sparkles" | "download" | "upload" | "shield" | "timer" | "flip" | "refresh" | "check" | "close" | "help" | "sun" | "heart" | "flower" | "image" | "stop";
+type Name = "camera" | "sparkles" | "download" | "upload" | "shield" | "timer" | "flip" | "refresh" | "check" | "close" | "help" | "sun" | "heart" | "flower" | "image" | "stop" | "coffee" | "copy";
 const paths: Record<Name, React.ReactNode> = {
   camera: <><path d="M8 5 6 8H3v12h18V8h-3l-2-3Z"/><circle cx="12" cy="14" r="4"/></>,
   sparkles: <><path d="m12 3 2.3 6.7L21 12l-6.7 2.3L12 21l-2.3-6.7L3 12l6.7-2.3Z"/><path d="m20 2 .5 1.5L22 4l-1.5.5L20 6l-.5-1.5L18 4l1.5-.5Z"/></>,
@@ -16,6 +16,8 @@ const paths: Record<Name, React.ReactNode> = {
   flower: <><path d="M12 8C6 0 0 9 8 12c-8 6 1 12 4 4 6 8 12-1 4-4 8-6-1-12-4-4Z"/><circle cx="12" cy="12" r="2"/></>,
   image: <><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 6-6 4 4 3-3 5 5"/></>,
   stop: <rect x="6" y="6" width="12" height="12" rx="2"/>,
+  coffee: <><path d="M4 9h12v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5ZM16 10h2a3 3 0 1 1 0 6h-2M7 2v3m4-3v3m4-3v3M2 21h17"/></>,
+  copy: <><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></>,
 };
 export default function Icon({ name, size = 20, className = "" }: { name: Name; size?: number; className?: string }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}>{paths[name]}</svg>;
