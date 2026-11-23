@@ -1,0 +1,31 @@
+{
+  "name": "mot-chut-photobooth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "predev": "node scripts/tailwind.mjs",
+    "dev": "next dev --hostname 127.0.0.1",
+    "prebuild": "node scripts/tailwind.mjs",
+    "build": "next build",
+    "start": "node scripts/serve.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-isolation=none tests/photo.test.mjs",
+    "test:e2e": "node --test --test-isolation=none tests/photobooth.test.mjs"
+  },
+  "dependencies": {
+    "next": "16.4.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/node": "4.3.4",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "playwright-core": "1.64.1",
+    "tailwindcss": "4.3.4",
+    "typescript": "5.9.3"
+  }
+}

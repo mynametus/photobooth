@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.sites-runtime/
+src/app/tailwind.generated.css
+.env*
+!.env.example
